@@ -17,9 +17,9 @@ export async function show(): Promise<void> {
       output.field("Description", data.description || "(none)");
       output.field("Wallet", data.walletAddress);
       output.field("Token", data.tokenAddress || "(none)");
-      if (data.jobOfferings?.length > 0) {
+      if (data.jobs?.length > 0) {
         output.log("\n  Job Offerings:");
-        for (const o of data.jobOfferings) {
+        for (const o of data.jobs) {
           const price = o.priceV2 ? `${o.priceV2.value} (${o.priceV2.type})` : "-";
           output.log(`    - ${o.name}  fee: ${price}  sla: ${o.slaMinutes}min`);
         }

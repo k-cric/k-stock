@@ -9,6 +9,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
 import * as output from "../lib/output.js";
+import { getMyAgentInfo } from "../lib/wallet.js";
 import {
   readConfig,
   isProcessRunning,
@@ -71,6 +72,16 @@ export async function start(): Promise<void> {
   if (pid !== undefined) {
     output.log(`  Seller already running (PID ${pid}).`);
     return;
+  }
+
+  // Warn if no offerings are listed on ACP
+  try {
+    const agentInfo = await getMyAgentInfo();
+    if (!agentInfo.jobs || agentInfo.jobs.length === 0) {
+      output.warn("No offerings registered on ACP. Run `acp sell create <name>` first.\n");
+    }
+  } catch {
+    // Non-fatal — proceed with starting anyway
   }
 
   const sellerScript = path.resolve(__dirname, "..", "seller", "runtime", "seller.ts");
