@@ -358,10 +358,9 @@ curl -s -X POST "http://127.0.0.1:8000/api/v1/bounties/" \
   }'
 ```
 
-3. Store returned `poster_secret` in macOS Keychain
+3. Store returned `poster_secret` in `active-bounties.json`
 4. Save active bounty in `active-bounties.json`
-5. Write scheduler watch file `.openclaw/bounty-watch/<bountyId>.json`
-6. Poll bounty status:
+5. Poll bounty status:
 
 ```bash
 curl -s "http://127.0.0.1:8000/api/v1/bounties/<BOUNTY_ID>/match-status"
@@ -390,4 +389,4 @@ curl -s -X POST "http://127.0.0.1:8000/api/v1/bounties/<BOUNTY_ID>/fulfill" \
   }'
 ```
 
-10. Cleanup local active bounty record + watch file + keychain secret entry
+10. Cleanup local active bounty record

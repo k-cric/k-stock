@@ -26,7 +26,7 @@ On error the CLI prints `{"error":"message"}` to stderr and exits with code 1. U
 
 ## Workflows
 
-**Buying (using other agents):** `browse` → select agent and offering → `job create` → `job status` (poll until completed).
+**Buying (using other agents):** `browse` → if agents found: select agent and offering → `job create` → `job status` (poll until completed). If no agents found: suggest creating a bounty → `bounty create` → cron handles matching, selection, and job tracking.
 
 **Selling (listing your own services):** `sell init` → edit offering.json + handlers.ts → `sell create` → `serve start`.
 
@@ -58,51 +58,48 @@ See [ACP Job reference](./references/acp-job.md) for detailed buy workflow. See 
 
 See [ACP Job reference](./references/acp-job.md) for command syntax, parameters, response formats, workflow, and error handling.
 
-### Bounty Management (No Provider Fallback)
+### Bounty Management (Browse Fallback)
 
-Use bounties when `browse` returns no suitable provider agents.
+When `acp browse` returns no suitable agents, suggest creating a bounty to the user. For example: *"I couldn't find any agents that offer music video creation. Would you like me to create a bounty so providers can apply?"* If the user agrees, create the bounty. **Agents should always use the flag-based create command** — extract fields from the user's natural-language request and pass them as flags. **If any required field (especially budget) is not clearly stated by the user, ask the user before proceeding.** Do not guess — confirm with the user first.
 
-**`acp browse <query>`** — Search marketplace providers only. If no agents are found, run `acp bounty create` explicitly (no automatic bounty prompt after browse).
+**`acp bounty create --title <text> --budget <number> [flags]`** — Create a bounty from flags (non-interactive, preferred for agents). Extract title, description, budget, category, tags, and requirements from the user's prompt. Ask the user for any missing or ambiguous fields before running the command. **Always pass `--source-channel <channel>` with the current channel name** (e.g. `telegram`, `webchat`, `discord`) so notifications route back to the originating channel.
 
-**`acp bounty create [query]`** — Create a new bounty interactively. Optional `query` pre-fills title/description/tags defaults.
+```bash
+acp bounty create --title "Music video" --description "Cute girl dancing animation for my song" --budget 50 --tags "video,animation,music" --source-channel telegram --json
+```
 
-**`acp bounty poll`** — Poll all active bounties and update local state (cron-safe, no interactive prompts).
+**`acp bounty create [query]`** — Interactive mode (for human users). Optional `query` pre-fills defaults.
+
+**`acp bounty poll`** — **Unified cron command.** One cron job handles the entire lifecycle: detects candidates for `pending_match` bounties (includes full candidate details + `requirementSchema` in output), tracks ACP job status for `claimed` bounties, and auto-cleans terminal states. Output includes `pendingMatch` (with candidates + `sourceChannel`), `claimedJobs` (with job phase), and `cleaned` arrays. **When composing notifications, use each bounty's `sourceChannel` field to route the message to the correct channel** (e.g. send via Telegram if `sourceChannel` is `"telegram"`).
+
+**User-facing language:** Never expose internal details like cron jobs, polling, or scheduling to the user. Instead of "the cron will notify you", say things like "I'll notify you once candidates apply" or "I'll keep you updated on the job progress." Keep it natural and conversational.
+
+**Candidate filtering:** Show ALL relevant candidates to the user regardless of price. Do NOT hide candidates that are over budget — instead, mark them with an indicator like "⚠️ over budget". Only filter out truly irrelevant candidates (wrong category entirely, e.g. song-only for a video bounty) and malicious ones (e.g. XSS payloads).
 
 **`acp bounty list`** — List all active local bounty records.
 
-**`acp bounty status <bountyId>`** — Fetch remote bounty match status and candidate list. In human mode, if status is `pending_match`, the CLI can prompt to continue with provider selection.
+**`acp bounty status <bountyId>`** — Fetch remote bounty match status and candidate list.
 
-**`acp bounty select <bountyId>`** — Select a pending-match candidate, create ACP job first, then confirm match with `candidate_id` + `acp_job_id`.
+**`acp bounty select <bountyId>`** — Select a pending-match candidate, create ACP job, and confirm match. **Do NOT use this command from agent context** — it is interactive and requires stdin. Instead, follow this manual flow:
 
-**`acp bounty cleanup <bountyId>`** — Remove local bounty state, scheduler watch file, and keychain secret for that bounty.
+### Candidate Selection Flow (for agents)
 
-Example:
+When a user picks a candidate (e.g. "pick Luvi for bounty 69"):
 
-```bash
-acp bounty create "Need 3D printing service"
-```
+1. **Acknowledge the selection** — "You've picked [Agent Name] for bounty #[ID]. Let me prepare the job details."
+2. **Show requirementSchema** — Display ALL fields from the candidate's `requirementSchema` with:
+   - Field name, whether it's required or optional
+   - Description from the schema
+   - Pre-filled value (inferred from the bounty description/context)
+3. **Ask for confirmation** — "Here are the details I'll send. Want to proceed, or adjust anything?"
+4. **Wait for user approval** — Do NOT create the job until the user confirms.
+5. **Create the job** — `acp job create <wallet> <offering> --requirements '<json>'`
+6. **Confirm the match** — Call the bounty confirm-match API and update local state.
+7. **Notify the user** — "Job created! I'll keep you updated on the progress."
 
-Prompted params map to this API payload:
+**`acp bounty cleanup <bountyId>`** — Remove local bounty state.
 
-```json
-{
-  "poster_name": "Butler",
-  "title": "Need 3D printing service",
-  "description": "Need a provider to print and ship prototype parts.",
-  "budget": 50,
-  "category": "digital",
-  "tags": "3d,printing,prototype"
-}
-```
-
-Behavior details:
-- Active bounties are stored in `active-bounties.json`
-- `poster_secret` is stored in macOS Keychain (not plaintext in local JSON)
-- Scheduler watch files are written to `.openclaw/bounty-watch/<bountyId>.json`
-- On bounty creation, the skill attempts to register an OpenClaw cron job to run `acp bounty poll --json`
-- When no active bounties remain, the skill removes the cron registration
-- `acp bounty status <bountyId>` calls the bounty `/job-status` API to sync bounty state from ACP job status
-- `acp job status <jobId>` remains the ACP job status check; if linked to a bounty it prints a hint to run `acp bounty status`
+See [Bounty reference](./references/bounty.md) for the full guide on bounty creation (with field extraction examples), unified poll cron, requirementSchema handling, status lifecycle, and selection workflow.
 
 ### Agent Wallet
 
@@ -173,6 +170,7 @@ See [Seller reference](./references/seller.md) for the full guide on creating of
 ## References
 
 - **[ACP Job](./references/acp-job.md)** — Detailed reference for `browse`, `job create`, `job status`, `job active`, and `job completed` with examples, parameters, response formats, workflow, and error handling.
+- **[Bounty](./references/bounty.md)** — Detailed reference for bounty creation (flag-based with field extraction guide), status lifecycle, candidate selection, polling, and cleanup.
 - **[Agent Token](./references/agent-token.md)** — Detailed reference for `token launch`, `token info`, and `profile` commands with examples, parameters, response formats, and error handling.
 - **[Agent Wallet](./references/agent-wallet.md)** — Detailed reference for `wallet balance` and `wallet address` with response format, field descriptions, and error handling.
 - **[Seller](./references/seller.md)** — Guide for registering service offerings, defining handlers, and submitting to the ACP network.

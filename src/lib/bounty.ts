@@ -17,10 +17,10 @@ export type BountyStatus =
 
 export interface BountyCreateInput {
     poster_name: string;
+    poster_wallet_address: string;
     poster_email?: string;
     title: string;
     description: string;
-    requirements?: string;
     budget: number;
     category: string;
     tags: string;
@@ -46,15 +46,17 @@ export interface ActiveBounty {
     status: BountyStatus | string;
     title: string;
     description: string;
-    requirements?: string;
     budget: number;
     category: string;
     tags: string;
     posterName: string;
-    keychainAccountRef: string;
-    schedulerWatchPath?: string;
+    posterSecret: string;
     selectedCandidateId?: number;
     acpJobId?: string;
+    /** Set to true after the agent has been notified about pending_match candidates. */
+    notifiedPendingMatch?: boolean;
+    /** Channel where this bounty was created (e.g. "telegram", "webchat") for routing notifications. */
+    sourceChannel?: string;
 }
 
 interface ActiveBountiesFile {
@@ -67,9 +69,6 @@ const api = axios.create({
 });
 
 export const BOUNTY_STATE_PATH = path.resolve(ROOT, "active-bounties.json");
-export const BOUNTY_WATCH_DIR =
-    process.env.OPENCLAW_BOUNTY_WATCH_DIR?.trim() ||
-    path.resolve(ROOT, ".openclaw", "bounty-watch");
 
 function extractData<T>(raw: any): T {
     if (raw && typeof raw === "object" && "data" in raw) {
@@ -128,25 +127,6 @@ export function removeActiveBounty(bountyId: string): void {
     const state = readState();
     state.bounties = state.bounties.filter((b) => b.bountyId !== bountyId);
     writeState(state);
-}
-
-export function writeWatchFile(
-    bountyId: string,
-    payload: Record<string, unknown>
-): string {
-    fs.mkdirSync(BOUNTY_WATCH_DIR, { recursive: true });
-    const filePath = path.resolve(BOUNTY_WATCH_DIR, `${bountyId}.json`);
-    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2) + "\n");
-    return filePath;
-}
-
-export function removeWatchFile(filePath?: string): void {
-    if (!filePath) return;
-    try {
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-    } catch {
-        // Best-effort cleanup.
-    }
 }
 
 export async function createBounty(
@@ -226,27 +206,13 @@ export async function rejectCandidates(params: {
     return extractData<unknown>(res.data);
 }
 
-export async function fulfillBounty(params: {
-    bountyId: string;
-    posterSecret: string;
-}): Promise<unknown> {
-    const { bountyId, posterSecret } = params;
-    const res = await api.post(`/bounties/${encodeURIComponent(bountyId)}/fulfill`, {
-        poster_secret: posterSecret,
-    });
-    return extractData<unknown>(res.data);
-}
-
 export async function syncBountyJobStatus(params: {
     bountyId: string;
     posterSecret: string;
 }): Promise<unknown> {
     const { bountyId, posterSecret } = params;
-    console.log("syncing bounty job status", bountyId, posterSecret);
-    const url = `${api.defaults.baseURL}/bounties/${encodeURIComponent(bountyId)}/job-status`;
-    console.log("url", url);
     const res = await api.post(
-        url,
+        `/bounties/${encodeURIComponent(bountyId)}/job-status`,
         {
             poster_secret: posterSecret,
         }

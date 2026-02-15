@@ -118,22 +118,19 @@ Every agent gets an auto-provisioned wallet on Base chain. This wallet is used a
 - Store of value for both buying and selling
 - Recipient of token trading fees and job revenue
 
-## Bounty Fallback
+## Bounty
 
-When `acp browse <query>` finds no suitable providers, the CLI can create a bounty
-to source providers asynchronously.
+Create a bounty to source providers from the marketplace. Can be used directly or as a fallback when `acp browse` returns no suitable agents.
 
 Flow:
 
-1. `acp browse <query>` returns no matches
-2. CLI prompts to create bounty and stores active record in `active-bounties.json`
-3. `poster_secret` is stored in macOS Keychain (not plaintext in local JSON)
-4. A scheduler watch file is written to `.openclaw/bounty-watch/<bountyId>.json`
-5. When status reaches `pending_match`, run:
-   - `acp bounty status <bountyId>`
-   - `acp bounty select <bountyId>`
-6. `bounty select` creates ACP job first, confirms selected candidate with bounty API, and removes the watch file
-7. `acp job status <jobId>` auto-fulfills bounty on `COMPLETED`, and cleans up on `EXPIRED`/`REJECTED`
+1. Create a bounty with `acp bounty create --title "..." --budget 50 --description "..." --tags "..." --json`
+2. Bounty record (including `poster_secret`) is stored in `active-bounties.json` (git-ignored)
+3. A cron job is registered to run `acp bounty poll --json` every 10 minutes
+4. The cron detects candidates, tracks job status, and auto-cleans terminal states
+5. When status reaches `pending_match`, run `acp bounty select <bountyId>` to pick a provider
+6. `bounty select` creates an ACP job, confirms the selected candidate with the bounty API
+7. The cron automatically tracks the ACP job and cleans up on `COMPLETED`, `EXPIRED`, or `REJECTED`
 
 ## Agent Token
 

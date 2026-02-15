@@ -108,7 +108,12 @@ function buildHelp(): string {
     cmd("job status <job-id>", "Check job status"),
     cmd("job active [page] [pageSize]", "List active jobs"),
     cmd("job completed [page] [pageSize]", "List completed jobs"),
-    cmd("bounty create [query]", "Create a new bounty interactively"),
+    cmd("bounty create [query]", "Create a new bounty (interactive or flags)"),
+    flag("--title <text>", "Bounty title"),
+    flag("--description <text>", "Bounty description"),
+    flag("--budget <number>", "Budget in USD"),
+    flag("--category <digital|physical>", "Category (default: digital)"),
+    flag("--tags <csv>", "Comma-separated tags"),
     cmd("bounty poll", "Poll all active bounties (cron-safe)"),
     cmd("bounty list", "List active local bounties"),
     cmd("bounty status <bounty-id>", "Get bounty match status"),
@@ -207,7 +212,17 @@ function buildCommandHelp(command: string): string | undefined {
       "",
       `  ${bold("acp bounty")} ${dim("— Manage local bounty lifecycle")}`,
       "",
-      cmd("create [query]", "Create a bounty interactively"),
+      cmd("create [query]", "Create a bounty (interactive or via flags)"),
+      `    ${dim("Interactive:  acp bounty create \"video production\"")}`,
+      `    ${dim("With flags:   acp bounty create --title \"Music video\" --budget 50 --tags \"video,music\" --json")}`,
+      "",
+      flag("--title <text>", "Bounty title (triggers non-interactive mode)"),
+      flag("--description <text>", "Description (defaults to title)"),
+      flag("--budget <number>", "Budget in USD"),
+      flag("--category <digital|physical>", "Category (default: digital)"),
+      flag("--tags <csv>", "Comma-separated tags"),
+      flag("--source-channel <name>", "Channel where bounty originated (e.g. telegram, webchat)"),
+      "",
       cmd("poll", "Poll all active bounties and update local state"),
       cmd("list", "List active local bounties"),
       cmd("status <bounty-id>", "Fetch remote match status for a bounty"),
@@ -215,7 +230,7 @@ function buildCommandHelp(command: string): string | undefined {
         "select <bounty-id>",
         "Pick pending_match candidate, create ACP job, confirm match"
       ),
-      cmd("cleanup <bounty-id>", "Remove local bounty, watch file, and secret"),
+      cmd("cleanup <bounty-id>", "Remove local bounty state"),
       "",
     ].join("\n"),
 
@@ -411,10 +426,34 @@ async function main(): Promise<void> {
 
     case "bounty": {
       const bounty = await import("../src/commands/bounty.js");
-      const query = [rest[0], ...rest.slice(1)]
-        .filter((a) => a != null && !String(a).startsWith("-"))
-        .join(" ");
-      if (subcommand === "create") return bounty.create(query || undefined);
+      if (subcommand === "create") {
+        // Check for structured flags (non-interactive mode)
+        const titleFlag = getFlagValue(rest, "--title");
+        const descFlag = getFlagValue(rest, "--description");
+        const budgetFlag = getFlagValue(rest, "--budget");
+        const categoryFlag = getFlagValue(rest, "--category");
+        const tagsFlag = getFlagValue(rest, "--tags");
+        const sourceChannelFlag = getFlagValue(rest, "--source-channel");
+
+        if (titleFlag || budgetFlag) {
+          // Non-interactive: all from flags
+          const budget = budgetFlag != null ? Number(budgetFlag) : undefined;
+          return bounty.create(undefined, {
+            title: titleFlag,
+            description: descFlag,
+            budget: Number.isFinite(budget) ? budget : undefined,
+            category: categoryFlag,
+            tags: tagsFlag,
+            sourceChannel: sourceChannelFlag,
+          });
+        }
+
+        // Interactive fallback: treat remaining positional args as query seed
+        const query = rest
+          .filter((a) => a != null && !String(a).startsWith("-"))
+          .join(" ");
+        return bounty.create(query || undefined, { sourceChannel: sourceChannelFlag });
+      }
       if (subcommand === "poll") return bounty.poll();
       if (subcommand === "list") return bounty.list();
       if (subcommand === "status") return bounty.status(rest[0]);

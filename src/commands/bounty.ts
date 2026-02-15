@@ -8,7 +8,7 @@
 import readline from "readline";
 import client from "../lib/client.js";
 import * as output from "../lib/output.js";
-import { getMyAgentInfo } from "../lib/wallet.js";
+import { requireActiveAgent } from "../lib/wallet.js";
 import {
     type ActiveBounty,
     type BountyCreateInput,
@@ -17,14 +17,12 @@ import {
     getMatchStatus,
     listActiveBounties,
     removeActiveBounty,
-    removeWatchFile,
     rejectCandidates,
     saveActiveBounty,
     syncBountyJobStatus,
-    writeWatchFile,
     confirmMatch,
 } from "../lib/bounty.js";
-import { deleteSecret, readSecret, storeSecret } from "../lib/keychain.js";
+import { ROOT } from "../lib/config.js";
 import {
     ensureBountyPollCron,
     removeBountyPollCronIfUnused,
@@ -70,21 +68,6 @@ function candidatePriceDisplay(candidate: Record<string, unknown>): string {
     if (type === "fixed") return `${price} USDC`;
     if (type === "percentage") return `${price} (${type})`;
     return rawType != null ? `${price} ${String(rawType)}` : price;
-}
-
-function parseRequirements(requirements?: string): Record<string, unknown> {
-    if (!requirements || !requirements.trim()) {
-        return {};
-    }
-    try {
-        const parsed = JSON.parse(requirements);
-        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-            return parsed as Record<string, unknown>;
-        }
-    } catch {
-        // Fall through to text wrapper.
-    }
-    return { requirementsText: requirements };
 }
 
 type JsonSchemaProperty = {
@@ -152,7 +135,7 @@ async function collectRequirementsFromSchema(
     return out;
 }
 
-export async function createInteractive(query?: string): Promise<void> {
+export async function createInteractive(query?: string, sourceChannel?: string): Promise<void> {
     if (output.isJsonMode()) {
         output.fatal(
             "Interactive bounty creation is not supported in --json mode. Use human mode."
@@ -165,26 +148,8 @@ export async function createInteractive(query?: string): Promise<void> {
     });
 
     try {
-        let whoamiName = "";
-        try {
-            const me = await getMyAgentInfo();
-            whoamiName = me.name?.trim() ?? "";
-        } catch {
-            // Non-fatal fallback to stored profile or manual input.
-        }
-
-        const defaultPosterName = whoamiName;
-        const poster_name =
-            (
-                await question(
-                    rl,
-                    `  Poster name${defaultPosterName ? ` [${defaultPosterName}]` : ""}: `
-                )
-            ).trim() || defaultPosterName || "";
-
-        if (!poster_name) {
-            output.fatal("Poster name is required.");
-        }
+        const agent = await requireActiveAgent();
+        const poster_name = agent.name;
 
         const querySeed = query?.trim() || "";
         const defaultTitle = querySeed
@@ -228,6 +193,7 @@ export async function createInteractive(query?: string): Promise<void> {
         }
         const payload: BountyCreateInput = {
             poster_name,
+            poster_wallet_address: agent.walletAddress,
             title,
             description,
             budget,
@@ -236,18 +202,10 @@ export async function createInteractive(query?: string): Promise<void> {
         };
 
         const created = await createBounty(payload);
-        const keychainAccountRef = `bounty:${created.bountyId}:${poster_name}`;
-        storeSecret(keychainAccountRef, created.posterSecret);
 
-        const watchPath = writeWatchFile(created.bountyId, {
-            bountyId: created.bountyId,
-            status: "open",
-            createdAt: new Date().toISOString(),
-            query: querySeed,
-            title,
-            budget,
-        });
-
+        if (!sourceChannel) {
+            output.fatal("--source-channel is required (e.g. telegram, discord, webchat).");
+        }
         const active: ActiveBounty = {
             bountyId: created.bountyId,
             createdAt: new Date().toISOString(),
@@ -258,36 +216,45 @@ export async function createInteractive(query?: string): Promise<void> {
             category: categoryInput,
             tags,
             posterName: poster_name,
-            keychainAccountRef,
-            schedulerWatchPath: watchPath,
+            posterSecret: created.posterSecret,
+            sourceChannel,
         };
         saveActiveBounty(active);
+
+        let cronRegistered = false;
         try {
             const cron = ensureBountyPollCron();
-            if (cron.enabled && cron.created) {
+            cronRegistered = cron.enabled && cron.created;
+            if (cronRegistered) {
                 output.log("  OpenClaw cron job registered for `acp bounty poll`.\n");
             }
-        } catch (e) {
-            output.warn(
-                `Failed to register OpenClaw cron poller. You can still poll manually with \`acp bounty poll\`. ${e instanceof Error ? e.message : String(e)
-                }`
-            );
+        } catch {
+            // Cron registration failed — include instruction in output
         }
 
         output.output(
             {
                 bountyId: created.bountyId,
-                watchFile: watchPath,
                 status: "open",
+                cronRegistered,
+                ...(!cronRegistered ? {
+                    cronAction: "required",
+                    cronCommand: `openclaw cron add --id "openclaw-acp-bounty-poll" --schedule "*/10 * * * *" --command "cd \\"${ROOT}\\" && npx acp bounty poll --json"`,
+                } : {}),
             },
             (data) => {
                 output.heading("Bounty Created");
                 output.field("Bounty ID", data.bountyId);
                 output.field("Status", data.status);
-                output.field("Watch File", data.watchFile);
-                output.log(
-                    "\n  The OpenClaw scheduler can now monitor this bounty for pending matches.\n"
-                );
+                if (!cronRegistered) {
+                    output.log(
+                        "\n  IMPORTANT: Register the bounty poll cron job by running:"
+                    );
+                    output.log(
+                        `    openclaw cron add --id "openclaw-acp-bounty-poll" --schedule "*/10 * * * *" --command "cd \\"${ROOT}\\" && npx acp bounty poll --json"`
+                    );
+                }
+                output.log("");
             }
         );
     } finally {
@@ -295,8 +262,111 @@ export async function createInteractive(query?: string): Promise<void> {
     }
 }
 
-export async function create(query?: string): Promise<void> {
-    return createInteractive(query);
+export interface BountyCreateFlags {
+    title?: string;
+    description?: string;
+    budget?: number;
+    category?: string;
+    tags?: string;
+    sourceChannel?: string;
+}
+
+export async function createFromFlags(flags: BountyCreateFlags): Promise<void> {
+    // Always use the active agent as poster
+    const agent = await requireActiveAgent();
+    const posterName = agent.name;
+
+    const title = flags.title?.trim();
+    const description = flags.description?.trim() || title;
+    const budget = flags.budget;
+    const category = (flags.category?.trim() || "digital").toLowerCase();
+    const tags = flags.tags?.trim() || "";
+    const sourceChannel = flags.sourceChannel?.trim() || undefined;
+
+    if (!title) output.fatal("--title is required.");
+    if (budget == null || !Number.isFinite(budget) || budget <= 0) {
+        output.fatal("--budget must be a positive number.");
+    }
+    if (!sourceChannel) {
+        output.fatal("--source-channel is required (e.g. telegram, discord, webchat).");
+    }
+    if (category !== "digital" && category !== "physical") {
+        output.fatal('--category must be "digital" or "physical".');
+    }
+
+    const payload: BountyCreateInput = {
+        poster_name: posterName,
+        poster_wallet_address: agent.walletAddress,
+        title: title!,
+        description: description || title!,
+        budget: budget!,
+        category,
+        tags,
+    };
+
+    const created = await createBounty(payload);
+
+    const active: ActiveBounty = {
+        bountyId: created.bountyId,
+        createdAt: new Date().toISOString(),
+        status: "open",
+        title: title!,
+        description: description || title!,
+        budget: budget!,
+        category,
+        tags,
+        posterName,
+        posterSecret: created.posterSecret,
+        ...(sourceChannel ? { sourceChannel } : {}),
+    };
+    saveActiveBounty(active);
+
+    let cronRegistered = false;
+    try {
+        const cron = ensureBountyPollCron();
+        cronRegistered = cron.enabled && cron.created;
+        if (cronRegistered) {
+            output.log("  OpenClaw cron job registered for `acp bounty poll`.\n");
+        }
+    } catch {
+        // Cron registration failed — include instruction in output
+    }
+
+    output.output(
+        {
+            bountyId: created.bountyId,
+            status: "open",
+            sourceChannel: sourceChannel || null,
+            cronRegistered,
+            ...(!cronRegistered ? {
+                cronAction: "required",
+                cronCommand: `openclaw cron add --id "openclaw-acp-bounty-poll" --schedule "*/10 * * * *" --command "cd \\"${ROOT}\\" && npx acp bounty poll --json"`,
+            } : {}),
+        },
+        (data) => {
+            output.heading("Bounty Created");
+            output.field("Bounty ID", data.bountyId);
+            output.field("Status", data.status);
+            if (data.sourceChannel) output.field("Source Channel", data.sourceChannel);
+            if (!cronRegistered) {
+                output.log(
+                    "\n  IMPORTANT: Register the bounty poll cron job by running:"
+                );
+                output.log(
+                    `    openclaw cron add --id "openclaw-acp-bounty-poll" --schedule "*/10 * * * *" --command "cd \\"${ROOT}\\" && npx acp bounty poll --json"`
+                );
+            }
+            output.log("");
+        }
+    );
+}
+
+export async function create(query?: string, flags?: BountyCreateFlags): Promise<void> {
+    // If any structured flag is provided, use the non-interactive path
+    if (flags && (flags.title || flags.budget != null)) {
+        return createFromFlags(flags);
+    }
+    return createInteractive(query, flags?.sourceChannel);
 }
 
 export async function list(): Promise<void> {
@@ -317,17 +387,48 @@ export async function list(): Promise<void> {
     });
 }
 
+function normalizeCandidateForWatch(candidate: Record<string, unknown>): Record<string, unknown> {
+    return {
+        id: candidate.id,
+        agentName: candidateField(candidate, ["agent_name", "agentName", "name"]) || "(unknown)",
+        agentWallet: candidateField(candidate, [
+            "agent_wallet", "agentWallet", "agent_wallet_address",
+            "agentWalletAddress", "walletAddress", "providerWalletAddress", "provider_address",
+        ]) || "",
+        offeringName: candidateField(candidate, [
+            "job_offering", "jobOffering", "offeringName",
+            "jobOfferingName", "offering_name", "name",
+        ]) || "",
+        price: candidate.price ?? candidate.job_offering_price ?? candidate.jobOfferingPrice ?? candidate.job_fee ?? candidate.jobFee ?? candidate.fee ?? null,
+        priceType: candidate.priceType ?? candidate.price_type ?? candidate.jobFeeType ?? candidate.job_fee_type ?? null,
+        requirementSchema: candidate.requirementSchema ?? candidate.requirement_schema ?? candidate.requirement ?? null,
+    };
+}
+
 export async function poll(): Promise<void> {
     const bounties = listActiveBounties();
     const result: {
         checked: number;
         pendingMatch: Array<{
             bountyId: string;
-            candidateCount: number;
+            title: string;
+            description: string;
+            budget: number;
+            sourceChannel?: string;
+            candidates: Record<string, unknown>[];
+        }>;
+        claimedJobs: Array<{
+            bountyId: string;
+            acpJobId: string;
+            title: string;
+            jobPhase: string;
+            deliverable?: string;
+            sourceChannel?: string;
         }>;
         cleaned: Array<{
             bountyId: string;
             status: string;
+            sourceChannel?: string;
         }>;
         errors: Array<{
             bountyId: string;
@@ -336,6 +437,7 @@ export async function poll(): Promise<void> {
     } = {
         checked: 0,
         pendingMatch: [],
+        claimedJobs: [],
         cleaned: [],
         errors: [],
     };
@@ -343,23 +445,89 @@ export async function poll(): Promise<void> {
     for (const b of bounties) {
         result.checked += 1;
         try {
-            const remote = await getMatchStatus(b.bountyId);
-            const status = String(remote.status).toLowerCase();
-            if (status === "fulfilled" || status === "expired" || status === "rejected") {
-                removeWatchFile(b.schedulerWatchPath);
-                deleteSecret(b.keychainAccountRef);
-                removeActiveBounty(b.bountyId);
-                result.cleaned.push({ bountyId: b.bountyId, status });
+            // --- Claimed bounties: track ACP job status ---
+            if (b.status === "claimed" && b.acpJobId) {
+                let jobPhase = "";
+                let deliverable: string | undefined;
+                try {
+                    const jobRes = await client.get(`/acp/jobs/${b.acpJobId}`);
+                    const jobData = jobRes.data?.data ?? jobRes.data;
+                    jobPhase = String(jobData?.phase ?? "").toUpperCase();
+                    deliverable = jobData?.deliverable ?? undefined;
+                } catch {
+                    // If job fetch fails, skip this bounty for now
+                    result.errors.push({
+                        bountyId: b.bountyId,
+                        error: `Failed to fetch ACP job ${b.acpJobId} status`,
+                    });
+                    continue;
+                }
+
+                const isTerminalJob = jobPhase === "COMPLETED" || jobPhase === "REJECTED" || jobPhase === "EXPIRED";
+
+                if (isTerminalJob) {
+                    // Sync bounty status via /job-status endpoint
+                    if (b.posterSecret) {
+                        try {
+                            await syncBountyJobStatus({ bountyId: b.bountyId, posterSecret: b.posterSecret });
+                        } catch {
+                            // non-fatal — continue with cleanup
+                        }
+                    }
+
+                    const terminalStatus = jobPhase === "COMPLETED" ? "fulfilled" : jobPhase.toLowerCase();
+                    removeActiveBounty(b.bountyId);
+                    result.cleaned.push({ bountyId: b.bountyId, status: terminalStatus, ...(b.sourceChannel ? { sourceChannel: b.sourceChannel } : {}) });
+                } else {
+                    // Job still in progress — save current phase
+                    saveActiveBounty({ ...b });
+                    result.claimedJobs.push({
+                        bountyId: b.bountyId,
+                        acpJobId: b.acpJobId,
+                        title: b.title,
+                        jobPhase,
+                        deliverable,
+                        ...(b.sourceChannel ? { sourceChannel: b.sourceChannel } : {}),
+                    });
+                }
                 continue;
             }
 
-            saveActiveBounty({ ...b, status: remote.status });
-            if (status === "pending_match") {
+            // --- Non-claimed bounties: check match status ---
+            const remote = await getMatchStatus(b.bountyId);
+            const status = String(remote.status).toLowerCase();
+
+            if (status === "fulfilled" || status === "expired" || status === "rejected") {
+                removeActiveBounty(b.bountyId);
+                result.cleaned.push({ bountyId: b.bountyId, status, ...(b.sourceChannel ? { sourceChannel: b.sourceChannel } : {}) });
+                continue;
+            }
+
+            const isNewPendingMatch =
+                status === "pending_match" &&
+                Array.isArray(remote.candidates) &&
+                remote.candidates.length > 0 &&
+                !b.notifiedPendingMatch;
+
+            saveActiveBounty({
+                ...b,
+                status: remote.status,
+                // Mark as notified once we include it in pendingMatch output
+                ...(isNewPendingMatch ? { notifiedPendingMatch: true } : {}),
+            });
+
+            if (isNewPendingMatch) {
+                const candidates = remote.candidates.map((c) =>
+                    normalizeCandidateForWatch(c as Record<string, unknown>)
+                );
+
                 result.pendingMatch.push({
                     bountyId: b.bountyId,
-                    candidateCount: Array.isArray(remote.candidates)
-                        ? remote.candidates.length
-                        : 0,
+                    title: b.title,
+                    description: b.description,
+                    budget: b.budget,
+                    ...(b.sourceChannel ? { sourceChannel: b.sourceChannel } : {}),
+                    candidates,
                 });
             }
         } catch (e) {
@@ -370,27 +538,50 @@ export async function poll(): Promise<void> {
         }
     }
 
-    console.log("in result");
-
     try {
         removeBountyPollCronIfUnused();
     } catch {
         // non-fatal
     }
-    console.log("outputting result");
 
     output.output(result, (r) => {
         output.heading("Bounty Poll");
         output.field("Checked", r.checked);
         output.field("Pending Match", r.pendingMatch.length);
+        output.field("Claimed Jobs", r.claimedJobs.length);
         output.field("Cleaned", r.cleaned.length);
         output.field("Errors", r.errors.length);
         if (r.pendingMatch.length > 0) {
-            output.log("\n  Pending Match:");
+            output.log("\n  Pending Match (candidates ready):");
             for (const p of r.pendingMatch) {
                 output.log(
-                    `    - ${p.bountyId} (${p.candidateCount} candidate(s)) -> run: acp bounty select ${p.bountyId}`
+                    `    - Bounty ${p.bountyId}: "${p.title}" — ${p.candidates.length} candidate(s)`
                 );
+                for (const c of p.candidates) {
+                    const price = c.priceType === "fixed"
+                        ? `${c.price} USDC`
+                        : c.price != null ? String(c.price) : "N/A";
+                    output.log(
+                        `        ${c.agentName} — ${c.offeringName} (${price})`
+                    );
+                }
+                output.log(
+                    `      -> run: acp bounty select ${p.bountyId}`
+                );
+            }
+        }
+        if (r.claimedJobs.length > 0) {
+            output.log("\n  Claimed Jobs (in progress):");
+            for (const j of r.claimedJobs) {
+                output.log(
+                    `    - Bounty ${j.bountyId}: "${j.title}" — Job ${j.acpJobId} phase: ${j.jobPhase}`
+                );
+            }
+        }
+        if (r.cleaned.length > 0) {
+            output.log("\n  Cleaned (terminal):");
+            for (const c of r.cleaned) {
+                output.log(`    - ${c.bountyId}: ${c.status}`);
             }
         }
         if (r.errors.length > 0) {
@@ -408,16 +599,11 @@ export async function status(bountyId: string): Promise<void> {
     const active = getActiveBounty(bountyId);
     if (!active) output.fatal(`Bounty not found in local state: ${bountyId}`);
 
-    const posterSecret = readSecret(active.keychainAccountRef);
-    if (!posterSecret) {
-        output.warn(
-            `Bounty ${bountyId} could not sync job status: missing poster secret in keychain.`
-        );
-    } else {
+    if (active.posterSecret) {
         try {
             await syncBountyJobStatus({
                 bountyId,
-                posterSecret,
+                posterSecret: active.posterSecret,
             });
         } catch (e) {
             output.warn(
@@ -432,8 +618,6 @@ export async function status(bountyId: string): Promise<void> {
         normalized === "fulfilled" || normalized === "expired" || normalized === "rejected";
     const next = { ...active, status: remote.status };
     if (isTerminal) {
-        removeWatchFile(active.schedulerWatchPath);
-        deleteSecret(active.keychainAccountRef);
         removeActiveBounty(bountyId);
         try {
             removeBountyPollCronIfUnused();
@@ -488,9 +672,9 @@ export async function select(bountyId: string): Promise<void> {
     if (!bountyId) output.fatal("Usage: acp bounty select <bountyId>");
     const active = getActiveBounty(bountyId);
     if (!active) output.fatal(`Bounty not found in local state: ${bountyId}`);
-    const posterSecret = readSecret(active.keychainAccountRef);
+    const posterSecret = active.posterSecret;
     if (!posterSecret) {
-        output.fatal("Missing poster secret in keychain for this bounty.");
+        output.fatal("Missing poster secret for this bounty.");
     }
 
     const match = await getMatchStatus(bountyId);
@@ -533,6 +717,7 @@ export async function select(bountyId: string): Promise<void> {
                 status: "open",
                 selectedCandidateId: undefined,
                 acpJobId: undefined,
+                notifiedPendingMatch: false,
             });
             output.log(
                 "  Rejected current candidates. Bounty moved back to open for new matching.\n"
@@ -603,7 +788,7 @@ export async function select(bountyId: string): Promise<void> {
         const serviceRequirements =
             schema != null
                 ? await collectRequirementsFromSchema(rl, schema)
-                : parseRequirements(active.requirements);
+                : {};
 
         const job = await client.post<{ data?: { jobId?: number }; jobId?: number }>(
             "/acp/jobs",
@@ -629,8 +814,6 @@ export async function select(bountyId: string): Promise<void> {
             selectedCandidateId: candidateId,
             acpJobId,
         };
-        removeWatchFile(active.schedulerWatchPath);
-        next.schedulerWatchPath = undefined;
         saveActiveBounty(next);
 
         output.output(
@@ -666,8 +849,6 @@ export async function cleanup(bountyId: string): Promise<void> {
         output.log(`  Bounty not found locally: ${bountyId}`);
         return;
     }
-    removeWatchFile(active.schedulerWatchPath);
-    deleteSecret(active.keychainAccountRef);
     removeActiveBounty(bountyId);
     try {
         removeBountyPollCronIfUnused();
