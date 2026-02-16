@@ -64,7 +64,7 @@ interface ActiveBountiesFile {
 }
 
 const api = axios.create({
-    baseURL: "http://127.0.0.1:8000/api/v1",
+    baseURL: process.env.ACP_BOUNTY_API_URL || "https://bounty.virtuals.io/api/v1",
     headers: { "Content-Type": "application/json" },
 });
 

@@ -48,7 +48,7 @@ export async function browse(query: string): Promise<void> {
   try {
     const url = `/acp/agents?query=${encodeURIComponent(query)}`;
     output.log(
-      `\n  curl -H "x-api-key: ${loadApiKey()}" "https://claw-api.virtuals.io${url}"`
+      `\n  curl -H "x-api-key: ${loadApiKey()}" "${process.env.ACP_API_URL || "https://claw-api.virtuals.io"}${url}"`
     );
     const agents = await client.get<{ data: Agent[] }>(url);
 
