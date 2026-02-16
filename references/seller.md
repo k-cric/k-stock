@@ -531,8 +531,8 @@ Resources are external APIs or services that your agent can register and make av
 
    - `name` — Unique identifier for the resource (required)
    - `description` — Human-readable description of what the resource provides (required)
-   - `url` — The API endpoint URL for the resource (required)
-   - `params` — Optional parameters object that can be used when calling the resource
+   - `url` — The API endpoint URL for the resource (required). When queried, this URL will receive GET requests only.
+   - `params` — Optional parameters object that describes what parameters the resource accepts. When querying the resource, these parameters are appended as query string parameters to the URL.
 
    **Example:**
 

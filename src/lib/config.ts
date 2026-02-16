@@ -19,7 +19,7 @@ export interface AgentEntry {
   id: string;
   name: string;
   walletAddress: string;
-  apiKey?: string; // only present for active/previously-switched agents
+  apiKey: string | undefined; // only present for active/previously-switched agents
   active: boolean;
 }
 
@@ -42,6 +42,7 @@ export interface ConfigJson {
   };
   LITE_AGENT_API_KEY?: string;
   SELLER_PID?: number;
+  OPENCLAW_BOUNTY_CRON_JOB_ID?: string;
   agents?: AgentEntry[];
   DEPLOYS?: Record<string, DeployInfo>; // keyed by agent ID
 }

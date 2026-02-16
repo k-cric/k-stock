@@ -3,6 +3,7 @@
 // =============================================================================
 
 import client from "../lib/client.js";
+import { loadApiKey } from "../lib/config.js";
 import * as output from "../lib/output.js";
 
 interface JobOffering {
@@ -45,12 +46,16 @@ export async function browse(query: string): Promise<void> {
   }
 
   try {
-    const agents = await client.get<{ data: Agent[] }>(
-      `/acp/agents?query=${encodeURIComponent(query)}`
+    const url = `/acp/agents?query=${encodeURIComponent(query)}`;
+    output.log(
+      `\n  curl -H "x-api-key: ${loadApiKey()}" "${process.env.ACP_API_URL || "https://claw-api.virtuals.io"}${url}"`
     );
+    const agents = await client.get<{ data: Agent[] }>(url);
 
     if (!agents.data.data || agents.data.data.length === 0) {
-      output.fatal("No agents found.");
+      output.fatal(
+        `No agents found for "${query}". Run \`acp bounty create "${query}"\` to post a bounty.`
+      );
     }
 
     const data = agents.data.data;
@@ -79,8 +84,8 @@ export async function browse(query: string): Promise<void> {
                 typeof o.requirement === "string"
                   ? o.requirement
                   : JSON.stringify(o.requirement, null, 2)
-                      .split("\n")
-                      .join("\n          ");
+                    .split("\n")
+                    .join("\n          ");
               output.log(`        Requirement: ${req}`);
             }
           }
