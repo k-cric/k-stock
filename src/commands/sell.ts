@@ -42,6 +42,48 @@ function getOfferingsRoot(): string {
   return path.resolve(OFFERINGS_BASE, sanitizeAgentName(agent.name));
 }
 
+/**
+ * Detect offerings in the old flat structure (src/seller/offerings/<offering>/)
+ * instead of the new per-agent structure (src/seller/offerings/<agent>/<offering>/).
+ * Warns the user and shows the move command.
+ */
+export function checkForLegacyOfferings(): void {
+  if (!fs.existsSync(OFFERINGS_BASE)) return;
+
+  const agent = getActiveAgent();
+  if (!agent) return;
+  const agentDir = sanitizeAgentName(agent.name);
+
+  const entries = fs.readdirSync(OFFERINGS_BASE, { withFileTypes: true });
+  const legacyOfferings = entries.filter((e) => {
+    if (!e.isDirectory()) return false;
+    // Skip if it looks like an agent directory (contains subdirectories with offering.json)
+    const subPath = path.join(OFFERINGS_BASE, e.name);
+    const hasOfferingJson = fs.existsSync(path.join(subPath, "offering.json"));
+    const hasHandlers = fs.existsSync(path.join(subPath, "handlers.ts"));
+    // It's a legacy offering if it has offering.json + handlers.ts directly
+    return hasOfferingJson && hasHandlers;
+  });
+
+  if (legacyOfferings.length === 0) return;
+
+  const names = legacyOfferings.map((e) => e.name);
+  output.warn(
+    `Found ${names.length} offering(s) in the legacy directory structure:\n` +
+      names.map((n) => `    - src/seller/offerings/${n}/`).join("\n") +
+      "\n\n" +
+      `  Job offerings should be placed and classified by agent name in src/seller/offerings/${agentDir}/\n` +
+      `  Move them with:\n\n` +
+      names
+        .map(
+          (n) =>
+            `    mv src/seller/offerings/${n} src/seller/offerings/${agentDir}/${n}`
+        )
+        .join("\n") +
+      "\n"
+  );
+}
+
 /** Resources live at src/seller/resources/ */
 const RESOURCES_ROOT = path.resolve(__dirname, "..", "seller", "resources");
 
@@ -242,6 +284,7 @@ function buildAcpPayload(json: OfferingJson): JobOfferingData {
 // -- Init: scaffold a new offering --
 
 export async function init(offeringName: string): Promise<void> {
+  checkForLegacyOfferings();
   if (!offeringName) {
     output.fatal("Usage: acp sell init <offering_name>");
   }
@@ -308,6 +351,7 @@ export function requestPayment(request: any): string {
 // -- Create: validate + register --
 
 export async function create(offeringName: string): Promise<void> {
+  checkForLegacyOfferings();
   if (!offeringName) {
     output.fatal("Usage: acp sell create <offering_name>");
   }
@@ -467,6 +511,7 @@ function acpOfferingNames(acpOfferings: AcpOffering[]): Set<string> {
 }
 
 export async function list(): Promise<void> {
+  checkForLegacyOfferings();
   const acpOfferings = await fetchAcpOfferings();
   const acpNames = acpOfferingNames(acpOfferings);
   const localOfferings = listLocalOfferings();

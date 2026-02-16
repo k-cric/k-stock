@@ -10,6 +10,7 @@ import * as path from "path";
 import { fileURLToPath } from "url";
 import * as output from "../lib/output.js";
 import { getMyAgentInfo } from "../lib/wallet.js";
+import { checkForLegacyOfferings } from "./sell.js";
 import {
   findSellerPid,
   isProcessRunning,
@@ -48,6 +49,7 @@ function offeringHasLocalFiles(offeringName: string): boolean {
 }
 
 export async function start(): Promise<void> {
+  checkForLegacyOfferings();
   const pid = findSellerPid();
   if (pid !== undefined) {
     output.log(`  Seller already running (PID ${pid}).`);
