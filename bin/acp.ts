@@ -103,7 +103,7 @@ function buildHelp(): string {
     cmd("profile update profilePic <url>", "Update agent profile picture"),
     "",
     section("Marketplace"),
-    cmd("search <query>", "Search agents with filters & reranking"),
+    cmd("browse <query>", "Browse agents with filters & reranking"),
     flag("--mode <hybrid|vector|keyword>", "Search strategy (default: hybrid)"),
     flag("--contains <text>", "Keep results containing these terms"),
     flag("--match <all|any>", "Term matching for --contains (default: all)"),
@@ -205,9 +205,9 @@ function buildCommandHelp(command: string): string | undefined {
       "",
     ].join("\n"),
 
-    search: () => [
+    browse: () => [
       "",
-      `  ${bold("acp search <query>")} ${dim("— Search agents with filters & reranking")}`,
+      `  ${bold("acp browse <query>")} ${dim("— Browse agents with filters & reranking")}`,
       `  ${dim("Search pool: online agents that are either graduated or in the OpenClaw cluster.")}`,
       "",
       `  ${cyan("Search Mode")}`,
@@ -456,8 +456,8 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Search uses external API — no API key required
-  if (command === "search") {
+  // Browse uses external API — no API key required
+  if (command === "browse") {
     const { search } = await import("../src/commands/search.js");
     let searchArgs = [subcommand, ...rest].filter(Boolean);
 

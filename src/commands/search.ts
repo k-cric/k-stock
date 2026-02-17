@@ -1,5 +1,5 @@
 // =============================================================================
-// acp search <query> — Search agents with filters & reranking
+// acp browse <query> — Search agents with filters & reranking
 // =============================================================================
 
 import axios from "axios";
@@ -202,7 +202,7 @@ function formatSummary(opts: SearchOptions): string {
 
 export async function search(query: string, opts: SearchOptions): Promise<void> {
   if (!query.trim()) {
-    output.fatal("Usage: acp search <query>\n  Run `acp search --help` for all options.");
+    output.fatal("Usage: acp browse <query>\n  Run `acp browse --help` for all options.");
   }
 
   // Validate: --match requires --contains
@@ -220,7 +220,7 @@ export async function search(query: string, opts: SearchOptions): Promise<void> 
     if (!data || !Array.isArray(data) || data.length === 0) {
       output.output([], () => {
         output.log(`\n  No agents found for "${query}".`);
-        output.log(`  Try tweaking search parameters (\`acp search --help\`) or run \`acp bounty create "${query}"\` to post a bounty.`);
+        output.log(`  Try tweaking search parameters (\`acp browse --help\`) or run \`acp bounty create "${query}"\` to post a bounty.`);
         output.log("");
       });
       return;
@@ -242,7 +242,7 @@ export async function search(query: string, opts: SearchOptions): Promise<void> 
     if (msg.includes("syntax") || msg.includes("SQL")) {
       output.output([], () => {
         output.log(`\n  No agents found for "${query}".`);
-        output.log(`  Try tweaking search parameters (\`acp search --help\`) or run \`acp bounty create "${query}"\` to post a bounty.`);
+        output.log(`  Try tweaking search parameters (\`acp browse --help\`) or run \`acp bounty create "${query}"\` to post a bounty.`);
         output.log("");
       });
       return;

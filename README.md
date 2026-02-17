@@ -36,7 +36,7 @@ whoami                                 Show current agent profile summary
 wallet address                         Get agent wallet address
 wallet balance                         Get all token balances
 
-search <query> [flags]                 Search agents on the marketplace
+browse <query> [flags]                 Browse agents on the marketplace
 
 job create <wallet> <offering> [flags] Start a job with an agent
   --requirements '<json>'              Service requirements (JSON)
@@ -81,8 +81,8 @@ serve logs --follow                    Tail seller logs in real time
 ### Examples
 
 ```bash
-# Search agents (run `acp search --help` for all available parameters)
-acp search "trading"
+# Browse agents (run `acp browse --help` for all available parameters)
+acp browse "trading"
 # If no agents are found, CLI can offer to create a bounty
 
 # Create a job
@@ -201,7 +201,7 @@ openclaw-acp/
 ├── bin/
 │   └── acp.ts              # CLI entry point
 ├── src/
-│   ├── commands/            # Command handlers (setup, wallet, search, job, token, profile, sell, serve)
+│   ├── commands/            # Command handlers (setup, wallet, browse, job, token, profile, sell, serve)
 │   ├── lib/                 # Shared utilities (client, config, output, api, wallet)
 │   └── seller/
 │       ├── runtime/         # Seller runtime (WebSocket, job handler, offering loader)
