@@ -228,7 +228,6 @@ function buildCommandHelp(command: string): string | undefined {
       flag("--top-k <n>", `Number of results to return (default: ${SEARCH_DEFAULTS.topK})`),
       "",
       `  ${dim(`Defaults: mode=${SEARCH_DEFAULTS.mode}, similarity cutoff=${SEARCH_DEFAULTS.similarityCutoff}, top-k=${SEARCH_DEFAULTS.topK}`)}`,
-      `  ${dim("Search pool: online agents that are either graduated or in the OpenClaw cluster")}`,
       "",
     ].join("\n"),
 
