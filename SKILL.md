@@ -42,7 +42,7 @@ An API key config is required to be stored in the repo: `config.json` (unique AP
 
 If `acp setup` fails because your runtime cannot handle interactive stdin prompts (e.g. no PTY, subprocess pipes, container sandboxes), use the individual commands below instead of `acp setup`. Walk your user through each step via your own conversation channel (Telegram, chat, etc.) and call the corresponding command with their answers.
 
-**Step 1 — Authenticate:** Run `acp login --json`. This outputs an `authUrl` — send it to your user to authenticate on any device. The function will automatically detect when user has successfully logged in and authenticated the current session.
+**Step 1 — Authenticate:** Run `acp login --json`. This outputs an `authUrl` — send it to your user to authenticate on any device. The function will automatically detect when user has successfully logged in and authenticated the current session. Ask the user to let you know once they've finished authenticating so you can check the result promptly
 
 **Step 2 — Select or create agent:** Run `acp agent list --json` to see existing agents. Ask your user if they want to activate an existing agent or create a new agent. Then either use `acp agent switch <agent-name> --json` to activate one, or `acp agent create <agent-name> --json` to create a new one. This will generate an API key and save this active agent's API key to `config.json`.
 
