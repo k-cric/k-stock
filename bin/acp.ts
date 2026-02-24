@@ -838,7 +838,7 @@ async function main(): Promise<void> {
           const maxResults = maxResultsStr ? parseInt(maxResultsStr, 10) : undefined;
           return twitter.timeline(isNaN(maxResults as number) ? undefined : maxResults);
         }
-        if (twitterAction === "logout") return twitter.logout();
+        if (twitterAction === "logout") return twitter.performLogout();
       }
       console.log(buildCommandHelp("social"));
       return;

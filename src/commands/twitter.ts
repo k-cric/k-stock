@@ -16,6 +16,7 @@ import {
   getTimeline,
   type SearchTweetsParams,
   SortOrder,
+  logout,
 } from "../lib/twitterApi.js";
 import { openUrl } from "../lib/open.js";
 import * as output from "../lib/output.js";
@@ -209,7 +210,7 @@ export async function timeline(maxResults?: number): Promise<void> {
   }
 }
 
-export async function logout(): Promise<void> {
+export async function performLogout(): Promise<void> {
   try {
     output.log("  Logging out from Twitter/X...\n");
 
