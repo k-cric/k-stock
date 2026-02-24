@@ -698,7 +698,7 @@ export async function poll(): Promise<void> {
     if (r.cleaned.length > 0) {
       output.log("\n  Cleaned (terminal):");
       for (const c of r.cleaned) {
-        output.log(`    - ${c.bountyId}: ${c.status}`);
+        output.log(`    - Bounty ${c.bountyId}: "${c.title}" — ${c.status}`);
       }
     }
     if (r.errors.length > 0) {
