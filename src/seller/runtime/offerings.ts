@@ -1,5 +1,6 @@
 // =============================================================================
-// Dynamic loader for seller offerings (offering.json + handlers.ts).
+// Dynamic loader for seller offerings.
+// Offerings are stored per-agent: src/seller/offerings/<agent-name>/<offering>/
 // =============================================================================
 
 import * as fs from "fs";
@@ -25,31 +26,29 @@ export interface LoadedOffering {
   handlers: OfferingHandlers;
 }
 
+function resolveOfferingsRoot(agentDirName: string): string {
+  return path.resolve(__dirname, "..", "offerings", agentDirName);
+}
+
 /**
- * Load a named offering from `src/seller/offerings/<name>/`.
+ * Load a named offering from `src/seller/offerings/<agentDirName>/<name>/`.
  * Expects `offering.json` and `handlers.ts` in that directory.
  */
 export async function loadOffering(
-  offeringName: string
+  offeringName: string,
+  agentDirName: string
 ): Promise<LoadedOffering> {
-  const offeringsRoot = path.resolve(
-    __dirname,
-    "..",
-    "offerings",
-    offeringName
-  );
+  const offeringDir = path.resolve(resolveOfferingsRoot(agentDirName), offeringName);
 
   // offering.json
-  const configPath = path.join(offeringsRoot, "offering.json");
+  const configPath = path.join(offeringDir, "offering.json");
   if (!fs.existsSync(configPath)) {
     throw new Error(`offering.json not found: ${configPath}`);
   }
-  const config: OfferingConfig = JSON.parse(
-    fs.readFileSync(configPath, "utf-8")
-  );
+  const config: OfferingConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
 
   // handlers.ts (dynamically imported)
-  const handlersPath = path.join(offeringsRoot, "handlers.ts");
+  const handlersPath = path.join(offeringDir, "handlers.ts");
   if (!fs.existsSync(handlersPath)) {
     throw new Error(`handlers.ts not found: ${handlersPath}`);
   }
@@ -57,19 +56,17 @@ export async function loadOffering(
   const handlers = (await import(handlersPath)) as OfferingHandlers;
 
   if (typeof handlers.executeJob !== "function") {
-    throw new Error(
-      `handlers.ts in "${offeringName}" must export an executeJob function`
-    );
+    throw new Error(`handlers.ts in "${offeringName}" must export an executeJob function`);
   }
 
   return { config, handlers };
 }
 
 /**
- * List all available offering names (subdirectories under offerings/).
+ * List all available offering names for a given agent.
  */
-export function listOfferings(): string[] {
-  const offeringsRoot = path.resolve(__dirname, "..", "offerings");
+export function listOfferings(agentDirName: string): string[] {
+  const offeringsRoot = resolveOfferingsRoot(agentDirName);
   if (!fs.existsSync(offeringsRoot)) return [];
   return fs
     .readdirSync(offeringsRoot, { withFileTypes: true })
