@@ -729,40 +729,58 @@ export async function status(bountyId: string, flags?: { sync?: boolean }): Prom
     }
   }
 
-  if (!bounty) {
-    try {
-      const remote = await getBountyDetails(bountyId);
-      bounty = {
-        bountyId: String(remote.id ?? bountyId),
-        createdAt: String(remote.created_at ?? ""),
-        status: String(remote.status ?? ""),
-        title: String(remote.title ?? ""),
-        description: String(remote.description ?? ""),
-        budget: Number(remote.budget ?? 0),
-        category: String(remote.category ?? "digital"),
-        tags: String(remote.tags ?? ""),
-        posterName: String(remote.poster_name ?? ""),
-        posterSecret: "",
-      };
-    } catch (e: any) {
-      const msg =
-        e?.response?.data?.detail?.detail ??
-        e?.response?.data?.detail ??
-        (e instanceof Error ? e.message : String(e));
-      output.fatal(`Bounty not found: ${msg}`);
-    }
+  let remote: Record<string, unknown> | null = null;
+  try {
+    remote = await getBountyDetails(bountyId);
+  } catch (e: any) {
+    const msg =
+      e?.response?.data?.detail?.detail ??
+      e?.response?.data?.detail ??
+      (e instanceof Error ? e.message : String(e));
+    if (!bounty) output.fatal(`Bounty not found: ${msg}`);
   }
+
+  if (!bounty && remote) {
+    bounty = {
+      bountyId: String(remote.id ?? bountyId),
+      createdAt: String(remote.created_at ?? ""),
+      status: String(remote.status ?? ""),
+      title: String(remote.title ?? ""),
+      description: String(remote.description ?? ""),
+      budget: Number(remote.budget ?? 0),
+      category: String(remote.category ?? "digital"),
+      tags: String(remote.tags ?? ""),
+      posterName: String(remote.poster_name ?? ""),
+      posterSecret: "",
+    };
+  }
+
+  if (!bounty) output.fatal(`Bounty ${bountyId} not found.`);
+
+  const status = String(remote?.status ?? bounty.status).toLowerCase();
+  const claimedBy = String(remote?.claimed_by ?? "");
+  const claimedByWallet = String(remote?.claimed_by_agent_wallet ?? "");
+  const acpJobId = String(remote?.acp_job_id ?? bounty.acpJobId ?? "");
+  const matchedAgent = String(remote?.matched_acp_agent ?? "");
+  const candidates =
+    status === "pending_match" && remote?.matched_acp_agent_profile
+      ? [remote.matched_acp_agent_profile]
+      : [];
 
   output.output(
     {
       bountyId: bounty.bountyId,
-      status: bounty.status,
+      status,
       title: bounty.title,
       description: bounty.description,
       budget: bounty.budget,
       category: bounty.category,
       tags: bounty.tags,
-      ...(bounty.acpJobId ? { acpJobId: bounty.acpJobId } : {}),
+      ...(acpJobId ? { acpJobId } : {}),
+      ...(status === "claimed" && claimedBy ? { claimedBy } : {}),
+      ...(status === "claimed" && claimedByWallet ? { claimedByWallet } : {}),
+      ...(status === "claimed" && matchedAgent ? { matchedAgent } : {}),
+      ...(status === "pending_match" && candidates.length > 0 ? { candidates } : {}),
       ...(bounty.sourceChannel ? { sourceChannel: bounty.sourceChannel } : {}),
       createdAt: bounty.createdAt,
     },
@@ -775,6 +793,9 @@ export async function status(bountyId: string, flags?: { sync?: boolean }): Prom
       output.field("Category", data.category);
       output.field("Tags", data.tags);
       if (data.acpJobId) output.field("ACP Job ID", data.acpJobId);
+      if (data.claimedByWallet) output.field("Claimed By", data.claimedByWallet);
+      if (data.matchedAgent) output.field("Provider", data.matchedAgent);
+      if (data.candidates) output.field("Candidates", data.candidates.length);
       if (data.sourceChannel) output.field("Source Channel", data.sourceChannel);
       output.field("Created", data.createdAt);
       output.log("");
@@ -936,7 +957,7 @@ export async function select(bountyId: string): Promise<void> {
         output.field("Status", data.status);
         output.log(`\n  Use \`acp job status <jobId>\` to monitor the ACP job.`);
         output.log(
-          `  Then run \`acp bounty status ${data.bountyId}\` to sync/update bounty status.\n`
+          `  Then run \`acp bounty status ${data.bountyId} --sync\` to sync/update bounty status.\n`
         );
       }
     );
