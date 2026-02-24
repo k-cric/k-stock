@@ -19,8 +19,21 @@ export interface AgentEntry {
   id: string;
   name: string;
   walletAddress: string;
-  apiKey?: string; // only present for active/previously-switched agents
+  apiKey: string | undefined; // only present for active/previously-switched agents
   active: boolean;
+}
+
+export interface RailwayProjectConfig {
+  project: string;
+  environment: string;
+}
+
+export interface DeployInfo {
+  provider: string;
+  agentName: string;
+  offerings: string[];
+  deployedAt: string;
+  railwayConfig: RailwayProjectConfig;
 }
 
 export interface ConfigJson {
@@ -29,7 +42,9 @@ export interface ConfigJson {
   };
   LITE_AGENT_API_KEY?: string;
   SELLER_PID?: number;
+  OPENCLAW_BOUNTY_CRON_JOB_ID?: string;
   agents?: AgentEntry[];
+  DEPLOYS?: Record<string, DeployInfo>; // keyed by agent ID
 }
 
 export function readConfig(): ConfigJson {
@@ -70,9 +85,7 @@ export function loadApiKey(): string | undefined {
 export function requireApiKey(): string {
   const key = loadApiKey();
   if (!key) {
-    console.error(
-      "Error: LITE_AGENT_API_KEY is not set. Run `acp setup` first."
-    );
+    console.error("Error: LITE_AGENT_API_KEY is not set. Run `acp setup` first.");
     process.exit(1);
   }
   return key;
@@ -114,12 +127,8 @@ export function checkForExistingProcess(): void {
 
   if (config.SELLER_PID !== undefined) {
     if (isProcessRunning(config.SELLER_PID)) {
-      console.error(
-        `Seller process already running with PID: ${config.SELLER_PID}`
-      );
-      console.error(
-        "Please stop the existing process before starting a new one."
-      );
+      console.error(`Seller process already running with PID: ${config.SELLER_PID}`);
+      console.error("Please stop the existing process before starting a new one.");
       process.exit(1);
     } else {
       removePidFromConfig();
@@ -139,10 +148,10 @@ export function findSellerPid(): number | undefined {
   // Fallback: scan OS processes
   try {
     const { execSync } = require("child_process");
-    const out = execSync(
-      'ps ax -o pid,command | grep "seller/runtime/seller.ts" | grep -v grep',
-      { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }
-    );
+    const out = execSync('ps ax -o pid,command | grep "seller/runtime/seller.ts" | grep -v grep', {
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
     for (const line of out.trim().split("\n")) {
       const trimmed = line.trim();
       if (!trimmed) continue;
@@ -164,9 +173,12 @@ export function getActiveAgent(): AgentEntry | undefined {
 /** Find an agent by name (case-insensitive). */
 export function findAgentByName(name: string): AgentEntry | undefined {
   const config = readConfig();
-  return config.agents?.find(
-    (a) => a.name.toLowerCase() === name.toLowerCase()
-  );
+  return config.agents?.find((a) => a.name.toLowerCase() === name.toLowerCase());
+}
+
+export function findAgentByWalletAddress(walletAddress: string): AgentEntry | undefined {
+  const config = readConfig();
+  return config.agents?.find((a) => a.walletAddress.toLowerCase() === walletAddress.toLowerCase());
 }
 
 /** Activate an agent with a (possibly new) API key. Updates active flags and LITE_AGENT_API_KEY. */
@@ -183,6 +195,14 @@ export function activateAgent(agentId: string, apiKey: string): void {
     agents,
     LITE_AGENT_API_KEY: apiKey,
   });
+}
+
+/** Sanitize an agent name for use as a directory name. */
+export function sanitizeAgentName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
 }
 
 export function formatPrice(price: unknown, priceType?: unknown): string {
