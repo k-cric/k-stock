@@ -428,6 +428,7 @@ export async function poll(): Promise<void> {
     }>;
     cleaned: Array<{
       bountyId: string;
+      title: string;
       status: string;
       sourceChannel?: string;
     }>;
@@ -550,6 +551,7 @@ export async function poll(): Promise<void> {
           result.cleaned.push({
             bountyId: b.bountyId,
             status: terminalStatus,
+            title: b.title,
             ...(b.sourceChannel ? { sourceChannel: b.sourceChannel } : {}),
           });
         } else {
@@ -575,6 +577,7 @@ export async function poll(): Promise<void> {
         removeActiveBounty(b.bountyId);
         result.cleaned.push({
           bountyId: b.bountyId,
+          title: b.title,
           status,
           ...(b.sourceChannel ? { sourceChannel: b.sourceChannel } : {}),
         });
