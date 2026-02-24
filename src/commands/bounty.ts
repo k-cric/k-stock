@@ -714,13 +714,12 @@ export async function poll(): Promise<void> {
 export async function status(bountyId: string, flags?: { sync?: boolean }): Promise<void> {
   if (!bountyId) output.fatal("Usage: acp bounty status <bountyId> [--sync]");
 
-  const local = getActiveBounty(bountyId);
+  let bounty = getActiveBounty(bountyId);
 
-  if (flags?.sync) {
-    if (!local) output.fatal(`Cannot sync: bounty ${bountyId} not found in local state.`);
-    if (!local.posterSecret) output.fatal("Cannot sync: missing poster secret for this bounty.");
+  if (flags?.sync && bounty) {
+    if (!bounty.posterSecret) output.fatal("Cannot sync: missing poster secret for this bounty.");
     try {
-      await syncBountyJobStatus({ bountyId, posterSecret: local.posterSecret });
+      await syncBountyJobStatus({ bountyId, posterSecret: bounty.posterSecret });
     } catch (e: any) {
       const msg =
         e?.response?.data?.detail?.detail ??
@@ -730,50 +729,54 @@ export async function status(bountyId: string, flags?: { sync?: boolean }): Prom
     }
   }
 
-  let remote: Record<string, unknown> | null = null;
-  try {
-    remote = await getBountyDetails(bountyId);
-  } catch (e: any) {
-    const msg =
-      e?.response?.data?.detail?.detail ??
-      e?.response?.data?.detail ??
-      (e instanceof Error ? e.message : String(e));
-    if (!local) output.fatal(`Bounty not found: ${msg}`);
-    output.warn(`Could not fetch remote bounty details: ${msg}`);
-  }
-
-  const remoteStatus = remote ? String((remote as any).status ?? "").toLowerCase() : undefined;
-
-  if (local && remote && remoteStatus) {
-    saveActiveBounty({ ...local, status: remoteStatus });
+  if (!bounty) {
+    try {
+      const remote = await getBountyDetails(bountyId);
+      bounty = {
+        bountyId: String(remote.id ?? bountyId),
+        createdAt: String(remote.created_at ?? ""),
+        status: String(remote.status ?? ""),
+        title: String(remote.title ?? ""),
+        description: String(remote.description ?? ""),
+        budget: Number(remote.budget ?? 0),
+        category: String(remote.category ?? "digital"),
+        tags: String(remote.tags ?? ""),
+        posterName: String(remote.poster_name ?? ""),
+        posterSecret: "",
+      };
+    } catch (e: any) {
+      const msg =
+        e?.response?.data?.detail?.detail ??
+        e?.response?.data?.detail ??
+        (e instanceof Error ? e.message : String(e));
+      output.fatal(`Bounty not found: ${msg}`);
+    }
   }
 
   output.output(
     {
-      bountyId,
-      ...(local ? { local } : {}),
-      ...(remote ? { remote } : {}),
+      bountyId: bounty.bountyId,
+      status: bounty.status,
+      title: bounty.title,
+      description: bounty.description,
+      budget: bounty.budget,
+      category: bounty.category,
+      tags: bounty.tags,
+      ...(bounty.acpJobId ? { acpJobId: bounty.acpJobId } : {}),
+      ...(bounty.sourceChannel ? { sourceChannel: bounty.sourceChannel } : {}),
+      createdAt: bounty.createdAt,
     },
     (data) => {
       output.heading(`Bounty ${data.bountyId}`);
-      if (data.remote) {
-        output.field("Status", data.remote.status);
-        output.field("Title", data.remote.title);
-        output.field("Description", data.remote.description);
-        output.field("Budget", data.remote.budget);
-        output.field("Category", data.remote.category);
-        output.field("Tags", data.remote.tags);
-        if (data.remote.acp_job_id) output.field("ACP Job ID", data.remote.acp_job_id);
-        if (data.remote.matched_acp_agent) output.field("Provider", data.remote.matched_acp_agent);
-        output.field("Created", data.remote.created_at);
-        output.field("Expires", data.remote.expires_at);
-      } else if (data.local) {
-        output.field("Status", data.local.status);
-        output.field("Title", data.local.title);
-        output.field("Description", data.local.description);
-        output.field("Budget", data.local.budget);
-        if (data.local.acpJobId) output.field("ACP Job ID", data.local.acpJobId);
-      }
+      output.field("Status", data.status);
+      output.field("Title", data.title);
+      output.field("Description", data.description);
+      output.field("Budget", data.budget);
+      output.field("Category", data.category);
+      output.field("Tags", data.tags);
+      if (data.acpJobId) output.field("ACP Job ID", data.acpJobId);
+      if (data.sourceChannel) output.field("Source Channel", data.sourceChannel);
+      output.field("Created", data.createdAt);
       output.log("");
     }
   );
