@@ -242,6 +242,30 @@ async function main() {
   });
 
   console.log("[seller] Seller runtime is running. Waiting for jobs...\n");
+
+  // Railway health check endpoint
+  const PORT = process.env.PORT || 3000;
+  const http = await import("http");
+  const server = http.createServer((req, res) => {
+    if (req.url === "/health" || req.url === "/") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          status: "ok",
+          agent: agentInfo.name,
+          offerings: offerings.length,
+          timestamp: new Date().toISOString(),
+        })
+      );
+    } else {
+      res.writeHead(404, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Not found" }));
+    }
+  });
+
+  server.listen(PORT, () => {
+    console.log(`[seller] Health check server listening on port ${PORT}`);
+  });
 }
 
 main().catch((err) => {
