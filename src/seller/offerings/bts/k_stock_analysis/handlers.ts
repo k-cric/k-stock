@@ -1,24 +1,26 @@
 import type { ExecuteJobResult, ValidationResult } from "../../../runtime/offeringTypes.js";
-import * as fs from "fs";
-import * as path from "path";
 
 // Required: implement your service logic here
 export async function executeJob(request: any): Promise<ExecuteJobResult> {
   try {
     // Get requested date or use today
     const requestedDate = request.date || new Date().toISOString().split("T")[0].replace(/-/g, "");
-    const csvPath = `/home/kyuns/ma-screener/results/ma_aligned_${requestedDate}.csv`;
 
-    // Check if file exists
-    if (!fs.existsSync(csvPath)) {
+    // GitHub raw URL for CSV files
+    const githubRawUrl = `https://raw.githubusercontent.com/k-cric/k-stock/main/results/ma_aligned_${requestedDate}.csv`;
+
+    // Fetch CSV from GitHub
+    const response = await fetch(githubRawUrl);
+
+    if (!response.ok) {
       return {
         deliverable: `CSV file not found for date ${requestedDate}. Analysis may not have been run yet.`,
         error: "File not found",
       };
     }
 
-    // Read CSV file
-    const csvContent = fs.readFileSync(csvPath, "utf-8");
+    // Read CSV content
+    const csvContent = await response.text();
 
     // Parse and format for better presentation
     const lines = csvContent.split("\n").slice(0, 51); // Header + top 50 rows
@@ -32,7 +34,7 @@ export async function executeJob(request: any): Promise<ExecuteJobResult> {
       metadata: {
         date: requestedDate,
         totalRows: lines.length - 1,
-        filePath: csvPath,
+        sourceUrl: githubRawUrl,
       },
     };
   } catch (error: any) {
