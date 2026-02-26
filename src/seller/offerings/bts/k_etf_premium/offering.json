@@ -1,0 +1,21 @@
+{
+  "name": "k_etf_premium",
+  "description": "국내 ETF 괴리율 추적 - 한국 상장 해외 ETF와 원본 ETF 간 가격 차이 분석. TIGER/KODEX 미국 ETF 괴리율로 매수/매도 타이밍 포착.",
+  "jobFee": 0.02,
+  "jobFeeType": "fixed",
+  "requiredFunds": false,
+  "requirement": {
+    "etf": {
+      "type": "string",
+      "description": "추적할 ETF (SPY: S&P500, QQQ: Nasdaq100, ALL: 전체)",
+      "enum": ["SPY", "QQQ", "ALL"],
+      "default": "ALL"
+    },
+    "language": {
+      "type": "string",
+      "description": "출력 언어 (ko: 한국어, en: English)",
+      "enum": ["ko", "en"],
+      "default": "ko"
+    }
+  }
+}
