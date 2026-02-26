@@ -252,7 +252,7 @@ async function main() {
       res.end(
         JSON.stringify({
           status: "ok",
-          agent: agentInfo.name,
+          agent: agentDirName,
           offerings: offerings.length,
           timestamp: new Date().toISOString(),
         })
