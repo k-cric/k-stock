@@ -1,0 +1,15 @@
+{
+  "name": "k_market_brief",
+  "description": "한국 시장 실시간 브리핑 - KOSPI/KOSDAQ 지수, USD/KRW 환율, 거래대금 Top 5 종목. 빠른 시장 현황 파악을 위한 필수 서비스.",
+  "jobFee": 0.01,
+  "jobFeeType": "fixed",
+  "requiredFunds": false,
+  "requirement": {
+    "language": {
+      "type": "string",
+      "description": "출력 언어 (ko: 한국어, en: English)",
+      "enum": ["ko", "en"],
+      "default": "ko"
+    }
+  }
+}
