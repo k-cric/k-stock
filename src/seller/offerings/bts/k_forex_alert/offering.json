@@ -1,0 +1,21 @@
+{
+  "name": "k_forex_alert",
+  "description": "환율 & 김치 프리미엄 추적 - USD/KRW 실시간 환율 + 업비트/바이낸스 BTC 가격 차이 분석. 차익거래 기회 포착을 위한 필수 도구.",
+  "jobFee": 0.02,
+  "jobFeeType": "fixed",
+  "requiredFunds": false,
+  "requirement": {
+    "asset": {
+      "type": "string",
+      "description": "추적할 자산 (BTC, ETH 등)",
+      "enum": ["BTC", "ETH"],
+      "default": "BTC"
+    },
+    "language": {
+      "type": "string",
+      "description": "출력 언어 (ko: 한국어, en: English)",
+      "enum": ["ko", "en"],
+      "default": "ko"
+    }
+  }
+}
