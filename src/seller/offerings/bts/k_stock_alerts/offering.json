@@ -1,0 +1,21 @@
+{
+  "name": "k_stock_alerts",
+  "description": "한국 주식 이벤트 알림 - 52주 신고가/신저가, 급등/급락 종목(±10%), 거래량 급증 종목을 실시간 추적. 시장 기회 포착을 위한 필수 도구.",
+  "jobFee": 0.03,
+  "jobFeeType": "fixed",
+  "requiredFunds": false,
+  "requirement": {
+    "alertType": {
+      "type": "string",
+      "description": "알림 유형 (52week: 52주 신고저가, surge: 급등락, volume: 거래량 급증, all: 전체)",
+      "enum": ["52week", "surge", "volume", "all"],
+      "default": "all"
+    },
+    "language": {
+      "type": "string",
+      "description": "출력 언어 (ko: 한국어, en: English)",
+      "enum": ["ko", "en"],
+      "default": "ko"
+    }
+  }
+}
