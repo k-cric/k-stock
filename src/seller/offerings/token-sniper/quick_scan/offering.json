@@ -1,0 +1,20 @@
+{
+  "name": "quick_scan",
+  "description": "⚡ 90-second token safety check - Honeypot detection, contract security audit, rugpull risk score (0-10). Essential pre-investment validation for any token. Fast, cheap, reliable.",
+  "jobFee": 0.01,
+  "jobFeeType": "fixed",
+  "requiredFunds": false,
+  "requirement": {
+    "tokenAddress": {
+      "type": "string",
+      "description": "Token contract address (0x...)",
+      "pattern": "^0x[a-fA-F0-9]{40}$"
+    },
+    "chain": {
+      "type": "string",
+      "description": "Blockchain network",
+      "enum": ["ethereum", "bsc", "base", "arbitrum", "polygon"],
+      "default": "base"
+    }
+  }
+}
