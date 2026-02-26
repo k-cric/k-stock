@@ -1,0 +1,26 @@
+{
+  "name": "token_due_diligence",
+  "description": "📋 Complete Token Due Diligence - Comprehensive analysis covering security audit, tokenomics, team background, liquidity, holder distribution, and investment thesis. Full 360° risk assessment with actionable recommendation.",
+  "jobFee": 0.05,
+  "jobFeeType": "fixed",
+  "requiredFunds": false,
+  "requirement": {
+    "tokenAddress": {
+      "type": "string",
+      "description": "Token contract address (0x...)",
+      "pattern": "^0x[a-fA-F0-9]{40}$"
+    },
+    "chain": {
+      "type": "string",
+      "description": "Blockchain network",
+      "enum": ["ethereum", "bsc", "base", "arbitrum", "polygon"],
+      "default": "base"
+    },
+    "depth": {
+      "type": "string",
+      "description": "Analysis depth",
+      "enum": ["standard", "deep"],
+      "default": "standard"
+    }
+  }
+}

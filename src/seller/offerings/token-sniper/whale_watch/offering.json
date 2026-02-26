@@ -1,0 +1,26 @@
+{
+  "name": "whale_watch",
+  "description": "🐋 Whale & Smart Money Tracker - Monitor large wallet movements, accumulation/distribution patterns, and smart money flow for any token. Track the big players before they move the market.",
+  "jobFee": 0.02,
+  "jobFeeType": "fixed",
+  "requiredFunds": false,
+  "requirement": {
+    "tokenAddress": {
+      "type": "string",
+      "description": "Token contract address (0x...)",
+      "pattern": "^0x[a-fA-F0-9]{40}$"
+    },
+    "chain": {
+      "type": "string",
+      "description": "Blockchain network",
+      "enum": ["ethereum", "bsc", "base", "arbitrum", "polygon"],
+      "default": "base"
+    },
+    "timeframe": {
+      "type": "string",
+      "description": "Analysis timeframe",
+      "enum": ["24h", "7d", "30d"],
+      "default": "24h"
+    }
+  }
+}
